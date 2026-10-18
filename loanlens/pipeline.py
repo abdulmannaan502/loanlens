@@ -75,7 +75,8 @@ Guidance:
 - An "unverified" lender means no evidence either way: that is NOT proof of fraud. With fair terms and full disclosures, an unverified lender is RISKY at most, and a next step is to check its name on rbi.org.in. Never call an unverified lender SAFE.
 - RISKY for high cost or missing disclosures from a regulated lender.
 - SAFE only if the cost is reasonable and disclosures are present.
-- Use simple words. No legal advice. Never change the computed numbers."""
+- Use simple words. Never change the computed numbers.
+- next_steps must NOT give legal or financial strategy: never tell the borrower to withhold, reduce or delay repayment, and never name commercial comparison sites or products. Safe actions only: don't accept / uninstall, revoke permissions, keep screenshots, report at sachet.rbi.org.in or cybercrime.gov.in (helpline 1930), check the lender's name on rbi.org.in, compare offers from banks or RBI-registered NBFCs, and talk to a lawyer or the consumer helpline (1915) if already in trouble."""
 
 TRANSLATE_SYSTEM = """Translate the JSON values into {lang} for a first-time borrower.
 Use everyday spoken words, not formal jargon. Keep numbers, ₹ amounts, percentages, app names and URLs unchanged.
