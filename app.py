@@ -94,6 +94,14 @@ with st.sidebar:
                 f"Tavily web search: {'connected ✅' if has_tavily else 'not configured'}")
     langs = st.multiselect("Also explain in", options=["te", "hi"], default=["te", "hi"],
                            format_func=lambda c: LANGS[c])
+    with st.expander("Open a saved report"):
+        saved = st.file_uploader("LoanLens report (.json)", type=["json"], key="saved_report")
+        if saved is not None and st.session_state.get("_loaded") != saved.name:
+            try:
+                st.session_state["result"] = Analysis(**json.loads(saved.getvalue()))
+                st.session_state["_loaded"] = saved.name
+            except Exception as e:
+                st.error(f"That file isn't a LoanLens report: {e}")
     st.markdown("---")
     st.caption("LoanLens is an awareness tool, not legal or financial advice. "
                "Report illegal lending apps at sachet.rbi.org.in or cybercrime.gov.in (helpline 1930).")
@@ -199,6 +207,11 @@ def render(a: Analysis):
 
     st.markdown(f'<div class="ll-receipt"><div class="ll-stamp v-{v}">{v}</div>'
                 f'<div class="app">{app}</div>{rows}{apr_block}</div>', unsafe_allow_html=True)
+
+    if a.calls:
+        secs = sum(x.get("seconds") or 0 for x in a.calls)
+        st.markdown(f'<div class="ll-note">Analysed live: {len(a.calls)} NVIDIA Nemotron calls on Nebius Token Factory'
+                    f'{" plus Tavily web search" if a.sources else ""}, {secs:.1f}s of model time.</div>', unsafe_allow_html=True)
 
     lang_tabs = ["English"] + [LANGS[l] for l in a.translations]
     tabs = st.tabs(lang_tabs)
