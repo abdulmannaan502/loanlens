@@ -23,6 +23,19 @@ from . import verify
 _SCRIPT_RANGES = {"te": (0x0C00, 0x0C7F), "hi": (0x0900, 0x097F)}
 
 
+def script_share(text: str, lang: str) -> float:
+    """Share of letters that are in the target script (ASCII counts against it)."""
+    lo, hi = _SCRIPT_RANGES[lang]
+    letters = [ch for ch in text if ch.isalpha()]
+    return sum(lo <= ord(ch) <= hi for ch in letters) / len(letters) if letters else 0.0
+
+
+def good_translation(src: str, cand: str, lang: str) -> bool:
+    """Reject stray scripts, instruction echoes (mostly English), and cut-off answers."""
+    return (bool(cand) and not foreign_letters(cand, lang)
+            and script_share(cand, lang) >= 0.5 and len(cand) >= 0.4 * len(src))
+
+
 def foreign_letters(text: str, lang: str) -> list[str]:
     lo, hi = _SCRIPT_RANGES[lang]
     return [ch for ch in text if ch.isalpha() and ord(ch) > 0x7F and not (lo <= ord(ch) <= hi)]
@@ -95,14 +108,14 @@ def translate_block(client: NemotronClient, block: dict, lang: str) -> dict | No
     system = SENTENCE_SYSTEM.format(lang=LANGS[lang])
 
     def one(src: str) -> str | None:
-        for temp in (0.1, 0.4, 0.7, 1.0):
+        for temp in (0.1, 0.3, 0.5, 0.7, 0.9, 1.0):
             try:
                 cand = client.chat("ULTRA", f"translate ({lang})", [{"role": "system", "content": system},
-                                   {"role": "user", "content": src}], max_tokens=1500, temperature=temp)
+                                   {"role": "user", "content": src}], max_tokens=3000, temperature=temp)
             except Exception:
                 continue
             cand = cand.strip().strip('"“”')
-            if cand and not foreign_letters(cand, lang):
+            if good_translation(src, cand, lang):
                 return cand
         return None
 

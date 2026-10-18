@@ -70,23 +70,24 @@ class NemotronClient:
         return OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=120)
 
     def chat(self, tier: str, step: str, messages: list[dict], max_tokens: int = 3000, temperature: float = 0.2) -> str:
-        """One completion. Nemotron reasoning tokens count against max_tokens, so if the model stops
-        for length with no answer, retry once with double the budget."""
+        """One completion. Nemotron's reasoning tokens count against max_tokens, so a generation can be
+        cut off mid-answer. A cut-off answer is never returned: retry with a doubled budget, then raise."""
         model = self.models[tier]
         t0 = time.time()
         budget = max_tokens
-        text, usage = "", None
-        for _ in range(2):
+        usage = None
+        for _ in range(3):
             resp = self._client().chat.completions.create(
                 model=model, messages=messages, max_tokens=budget, temperature=temperature)
             choice = resp.choices[0]
-            text = strip_reasoning(choice.message.content or "")
             usage = getattr(resp, "usage", None)
-            if text or choice.finish_reason != "length":
-                break
+            if choice.finish_reason != "length":
+                text = strip_reasoning(choice.message.content or "")
+                self.log.append(CallLog(step, model, round(time.time() - t0, 2), getattr(usage, "total_tokens", None)))
+                return text
             budget *= 2
         self.log.append(CallLog(step, model, round(time.time() - t0, 2), getattr(usage, "total_tokens", None)))
-        return text
+        raise ValueError(f"{step}: generation kept hitting the token limit")
 
     def chat_json(self, tier: str, step: str, system: str, user, max_tokens: int = 3000) -> dict:
         """Ask for JSON, validate it parses, retry once with the parse error."""

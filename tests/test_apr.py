@@ -61,3 +61,11 @@ def test_script_check():
     from loanlens.pipeline import foreign_letters
     assert foreign_letters("యాప్ ₹5,000 NBFC 1,647%", "te") == []
     assert foreign_letters("చేయলে", "te") == ["ল"]
+
+
+def test_translation_guards():
+    from loanlens.pipeline import good_translation
+    src = "The app wants your contacts, photos and SMS permissions."
+    assert good_translation(src, "ఈ యాప్ మీ కాంటాక్ట్స్, ఫోటోలు మరియు SMS అనుమతులు అడుగుతుంది.", "te")
+    assert not good_translation(src, "The user wants a translation into Telugu for a first-time borrower.", "te")  # instruction echo
+    assert not good_translation(src, "యాప్ SMS", "te")                                                              # cut off

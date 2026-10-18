@@ -241,6 +241,8 @@ def render(a: Analysis):
             if b.get("next_steps"):
                 st.markdown("**What to do now**")
                 st.markdown("\n".join(f"- {r}" for r in b["next_steps"]))
+            if b is not a.verdict:
+                st.caption("Translated by AI. If anything is unclear, check the English version.")
 
     if a.flags:
         st.markdown(f"### Red flags ({len(a.flags)})")
