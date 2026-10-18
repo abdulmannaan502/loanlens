@@ -19,6 +19,7 @@ class LoanTerms:
     other_fees_at_repayment: float = 0.0  # any fee added to the repayment
     installments: int = 1                 # 1 = single bullet repayment
     stated_rate: str | None = None        # whatever the app advertises, e.g. "0% interest"
+    amount_received: float | None = None  # money actually credited to the borrower, if the offer states it
 
 
 @dataclass
@@ -58,9 +59,13 @@ def compute_cost(t: LoanTerms) -> CostBreakdown:
         raise ValueError("Tenure must be at least one day.")
 
     notes: list[str] = []
-    fees = t.upfront_fees * (1 + GST_RATE) if t.gst_on_fees else t.upfront_fees
-    if t.gst_on_fees and t.upfront_fees:
-        notes.append(f"18% GST adds ₹{t.upfront_fees * GST_RATE:,.0f} to the upfront fee.")
+    if t.amount_received and 0 < t.amount_received < t.principal:
+        # The credited amount is ground truth: it already includes every deduction (fees, GST).
+        fees = t.principal - t.amount_received
+    else:
+        fees = t.upfront_fees * (1 + GST_RATE) if t.gst_on_fees else t.upfront_fees
+        if t.gst_on_fees and t.upfront_fees:
+            notes.append(f"18% GST adds ₹{t.upfront_fees * GST_RATE:,.0f} to the upfront fee.")
 
     net = t.principal - fees
     if net <= 0:

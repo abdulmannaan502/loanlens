@@ -1,12 +1,12 @@
 """The LoanLens agent pipeline.
 
     input (text / image / app name)
-      -> 1. extract terms          Nemotron Nano  (Nano Omni for images)
+      -> 1. extract terms          Nemotron Nano  (3.5 Super VL for images)
       -> 2. compute true cost      Python, deterministic
       -> 3. rule checks            Python, deterministic
       -> 4. verify lender          Tavily search + Nemotron Super
       -> 5. reason + verdict       Nemotron 3 Ultra
-      -> 6. translate              Nemotron Nano
+      -> 6. translate              Nemotron 3 Ultra, script-checked
 """
 from __future__ import annotations
 
@@ -14,9 +14,19 @@ import json
 from dataclasses import dataclass, field, asdict
 
 from .apr import LoanTerms, compute_cost, CostBreakdown
-from .llm import NemotronClient
+from .llm import NemotronClient, extract_json
 from .rules import check_terms, score, Flag, CHECKLIST
 from . import verify
+
+# Smaller models mixed in stray characters from other Indic scripts, so every translation is
+# checked: any letter outside the target script (or ASCII) triggers a retry.
+_SCRIPT_RANGES = {"te": (0x0C00, 0x0C7F), "hi": (0x0900, 0x097F)}
+
+
+def foreign_letters(text: str, lang: str) -> list[str]:
+    lo, hi = _SCRIPT_RANGES[lang]
+    return [ch for ch in text if ch.isalpha() and ord(ch) > 0x7F and not (lo <= ord(ch) <= hi)]
+
 
 LANGS = {"en": "English", "te": "Telugu", "hi": "Hindi"}
 
@@ -27,13 +37,14 @@ Return ONLY a JSON object with these keys (use null when not stated; never guess
   "lender_name": string|null,          // the bank/NBFC actually lending, if named
   "nbfc_partner": string|null,
   "principal": number|null,            // amount sanctioned/advertised in INR
-  "upfront_fees": number|null,         // processing/platform/verification fees deducted before disbursal, INR
+  "amount_received": number|null,      // money actually credited to the borrower, if stated (e.g. "Amount credited: ₹3,800")
+  "upfront_fees": number|null,         // processing/platform/verification fees deducted before disbursal, INR, as written (before any GST)
   "gst_on_fees": boolean|null,         // true if GST is charged on top of those fees
   "interest_amount": number|null,      // interest in INR over the whole tenure
   "interest_rate_text": string|null,   // as written, e.g. "0.1% per day"
-  "other_fees_at_repayment": number|null,
-  "tenure_days": number|null,
-  "installments": number|null,
+  "other_fees_at_repayment": number|null,  // fees added to a normal on-time repayment. NOT late fees or penalties
+  "tenure_days": number|null,          // total loan length in days; convert months (x30) and years (x365)
+  "installments": number|null,         // number of repayments, 1 if a single bullet repayment
   "stated_rate": string|null,          // the headline claim, e.g. "0% interest"
   "late_fee_text": string|null,
   "permissions": [string],             // e.g. ["contacts","camera","location"]
@@ -43,6 +54,8 @@ Return ONLY a JSON object with these keys (use null when not stated; never guess
   "disbursal_to_bank": boolean|null,
   "concerning_clauses": [string]       // short verbatim clauses that worry you, max 5
 }
+Boolean rules: kfs_provided / grievance_officer / cooling_off are true or false ONLY when the text says so explicitly, otherwise null. Wording like \"not provided\", \"not listed\", \"not shown\" means false.
+disbursal_to_bank is false if money goes to a wallet or third party, true if to the borrower's bank account.
 If an interest rate is given per day/month and the amount isn't, compute interest_amount = principal * rate * period."""
 
 VERDICT_SYSTEM = """You are LoanLens, a protective financial advisor for first-time borrowers in India.
@@ -58,7 +71,8 @@ Return ONLY JSON:
   "confidence": "high" | "medium" | "low"
 }
 Guidance:
-- AVOID if the lender is unregulated/warned about, OR APR > 100%, OR it accesses contacts/photos.
+- AVOID if the evidence shows the lender is unregulated or warned about, OR APR > 100%, OR it accesses contacts/photos.
+- An "unverified" lender means no evidence either way: that is NOT proof of fraud. With fair terms and full disclosures, an unverified lender is RISKY at most, and a next step is to check its name on rbi.org.in. Never call an unverified lender SAFE.
 - RISKY for high cost or missing disclosures from a regulated lender.
 - SAFE only if the cost is reasonable and disclosures are present.
 - Use simple words. No legal advice. Never change the computed numbers."""
@@ -66,6 +80,38 @@ Guidance:
 TRANSLATE_SYSTEM = """Translate the JSON values into {lang} for a first-time borrower.
 Use everyday spoken words, not formal jargon. Keep numbers, ₹ amounts, percentages, app names and URLs unchanged.
 Keep the same JSON keys. Keep "verdict" in English. Return ONLY the JSON."""
+
+
+SENTENCE_SYSTEM = ("Translate the user's sentence into {lang} for a first-time borrower, in everyday spoken words. "
+                   "Use ONLY {lang} script, plus digits, ₹, % and English app names. Output only the translation.")
+
+
+def translate_block(client: NemotronClient, block: dict, lang: str) -> dict | None:
+    """Translate headline/reasons/next_steps one sentence at a time, in parallel.
+    Each result is checked for letters from a wrong script and re-asked at rising temperature."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    system = SENTENCE_SYSTEM.format(lang=LANGS[lang])
+
+    def one(src: str) -> str | None:
+        for temp in (0.1, 0.4, 0.7, 1.0):
+            try:
+                cand = client.chat("ULTRA", f"translate ({lang})", [{"role": "system", "content": system},
+                                   {"role": "user", "content": src}], max_tokens=1500, temperature=temp)
+            except Exception:
+                continue
+            cand = cand.strip().strip('"“”')
+            if cand and not foreign_letters(cand, lang):
+                return cand
+        return None
+
+    reasons, steps = block.get("reasons") or [], block.get("next_steps") or []
+    items = [block.get("headline") or ""] + list(reasons) + list(steps)
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        res = list(ex.map(one, items))
+    if any(r is None for r in res):
+        return None
+    return {"headline": res[0], "reasons": res[1:1 + len(reasons)], "next_steps": res[1 + len(reasons):]}
 
 
 @dataclass
@@ -98,6 +144,7 @@ def terms_to_loan(t: dict) -> LoanTerms | None:
         interest_amount=float(t.get("interest_amount") or 0),
         other_fees_at_repayment=float(t.get("other_fees_at_repayment") or 0),
         installments=int(t.get("installments") or 1),
+        amount_received=float(t["amount_received"]) if t.get("amount_received") else None,
         stated_rate=t.get("stated_rate"),
     )
 
@@ -111,7 +158,7 @@ def run(client: NemotronClient, text: str = "", image: tuple[bytes, str] | None 
     say = progress or (lambda *_: None)
 
     # 1. Extract
-    say("extract", "Reading the offer with Nemotron" + (" Nano Omni (vision)" if image else " Nano"))
+    say("extract", "Reading the offer with Nemotron" + (" 3.5 Super VL (vision)" if image else " Nano"))
     hint = f"App name given by user: {app_name}\n\n" if app_name else ""
     if image:
         user = [{"type": "text", "text": hint + "Extract the loan terms from this screenshot. " + (text or "")},
@@ -167,16 +214,14 @@ def run(client: NemotronClient, text: str = "", image: tuple[bytes, str] | None 
     }
     verdict = client.chat_json("ULTRA", "verdict", VERDICT_SYSTEM, json.dumps(payload, ensure_ascii=False), max_tokens=2500)
 
-    # 6. Translate
+    # 6. Translate  Nemotron 3 Ultra (smaller models garbled Telugu), script-checked
     translations = {}
     for lang in languages:
-        say("translate", f"Explaining in {LANGS[lang]} with Nemotron Nano")
-        try:
-            translations[lang] = client.chat_json(
-                "NANO", f"translate ({lang})", TRANSLATE_SYSTEM.format(lang=LANGS[lang]),
-                json.dumps({k: verdict.get(k) for k in ("headline", "reasons", "next_steps")}, ensure_ascii=False))
-        except Exception:
-            pass
+        say("translate", f"Explaining in {LANGS[lang]} with Nemotron 3 Ultra")
+        payload_t = json.dumps({k: verdict.get(k) for k in ("headline", "reasons", "next_steps")}, ensure_ascii=False)
+        t = translate_block(client, {k: verdict.get(k) for k in ("headline", "reasons", "next_steps")}, lang)
+        if t:
+            translations[lang] = t
 
     return Analysis(
         terms=terms, cost=cost_dict(cost), flags=[f.to_dict() for f in flags], risk_score=score(flags),

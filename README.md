@@ -23,25 +23,25 @@ $$\text{APR} = \frac{1200}{3800} \times \frac{365}{7} \approx 1{,}647\%$$
 
 ```
 input (text / screenshot / app name)
-  1. Extract terms         Nemotron Nano (Nemotron Nano Omni for images)   -> strict JSON
+  1. Extract terms         Nemotron Nano (Nemotron 3.5 Super VL for images)   -> strict JSON
   2. Compute true cost     Python (deterministic: APR, IRR for EMIs, GST)
   3. Rule checks           Python checklist based on RBI digital lending rules
   4. Verify the lender     Tavily search  ->  Nemotron Super summarises evidence with sources
   5. Verdict               Nemotron 3 Ultra weighs cost + flags + evidence -> AVOID / RISKY / SAFE
-  6. Explain               Nemotron Nano translates to Telugu and Hindi
+  6. Explain               Nemotron 3 Ultra writes Telugu and Hindi, with a script-purity check and retry
 ```
 
 ### How NVIDIA Nemotron is used
 
 | Step | Model (default ID, configurable) | Why this size |
 |---|---|---|
-| Term extraction | `nvidia/nemotron-3-nano-30b-a3b` | Fast, cheap, reliable JSON |
-| Screenshot reading | `nvidia/nemotron-3-nano-omni` | Multimodal input |
+| Term extraction | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Fast, cheap, reliable JSON |
+| Screenshot reading | `nvidia/Nemotron-3.5-Super-VL` | Multimodal input |
 | Evidence summary | `nvidia/nemotron-3-super-120b-a12b` | Careful reading of several web sources |
-| Final verdict | `nvidia/nemotron-3-ultra-550b-a55b` | Multi-factor reasoning |
-| Translation | `nvidia/nemotron-3-nano-30b-a3b` | Quick, natural local-language output |
+| Final verdict | `nvidia/Nemotron-3-Ultra-550b-a55b` | Multi-factor reasoning |
+| Telugu and Hindi | `nvidia/Nemotron-3-Ultra-550b-a55b` | Nano and Super mixed in stray characters from other scripts in Telugu; Ultra is clean, and every output is script-checked |
 
-Model routing keeps the app responsive and stretches credits: only one Ultra call per analysis.
+Model routing keeps simple steps fast and cheap, and saves Ultra for the verdict and for Telugu and Hindi, where smaller models made mistakes.
 
 ### Where Nebius Token Factory fits
 

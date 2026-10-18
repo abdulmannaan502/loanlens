@@ -4,10 +4,10 @@ Token Factory exposes an OpenAI-compatible API, so the official `openai` SDK is
 used with Nebius's base URL. Each pipeline step is routed to the smallest
 Nemotron model that does it well:
 
-  NANO   -> fast structured extraction and translation
-  VISION -> reading screenshots / scanned agreements
+  NANO   -> fast structured extraction
+  VISION -> reading screenshots (Nemotron 3.5 Super VL) / scanned agreements
   SUPER  -> summarising web evidence about the lender
-  ULTRA  -> the final multi-factor reasoning and verdict
+  ULTRA  -> the final reasoning/verdict and Telugu/Hindi (smaller models garbled Telugu)
 
 Model IDs are configurable because the Token Factory catalog evolves; set them
 in Streamlit secrets or environment variables.
@@ -24,10 +24,10 @@ from dataclasses import dataclass, field
 DEFAULT_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 
 DEFAULT_MODELS = {
-    "NANO": "nvidia/nemotron-3-nano-30b-a3b",
+    "NANO": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
     "SUPER": "nvidia/nemotron-3-super-120b-a12b",
-    "ULTRA": "nvidia/nemotron-3-ultra-550b-a55b",
-    "VISION": "nvidia/nemotron-3-nano-omni",
+    "ULTRA": "nvidia/Nemotron-3-Ultra-550b-a55b",
+    "VISION": "nvidia/Nemotron-3.5-Super-VL",
 }
 
 
@@ -69,18 +69,26 @@ class NemotronClient:
         from openai import OpenAI
         return OpenAI(api_key=self.api_key, base_url=self.base_url, timeout=120)
 
-    def chat(self, tier: str, step: str, messages: list[dict], max_tokens: int = 1500, temperature: float = 0.2) -> str:
+    def chat(self, tier: str, step: str, messages: list[dict], max_tokens: int = 3000, temperature: float = 0.2) -> str:
+        """One completion. Nemotron reasoning tokens count against max_tokens, so if the model stops
+        for length with no answer, retry once with double the budget."""
         model = self.models[tier]
         t0 = time.time()
-        resp = self._client().chat.completions.create(
-            model=model, messages=messages, max_tokens=max_tokens, temperature=temperature,
-        )
-        text = resp.choices[0].message.content or ""
-        usage = getattr(resp, "usage", None)
+        budget = max_tokens
+        text, usage = "", None
+        for _ in range(2):
+            resp = self._client().chat.completions.create(
+                model=model, messages=messages, max_tokens=budget, temperature=temperature)
+            choice = resp.choices[0]
+            text = strip_reasoning(choice.message.content or "")
+            usage = getattr(resp, "usage", None)
+            if text or choice.finish_reason != "length":
+                break
+            budget *= 2
         self.log.append(CallLog(step, model, round(time.time() - t0, 2), getattr(usage, "total_tokens", None)))
-        return strip_reasoning(text)
+        return text
 
-    def chat_json(self, tier: str, step: str, system: str, user, max_tokens: int = 1500) -> dict:
+    def chat_json(self, tier: str, step: str, system: str, user, max_tokens: int = 3000) -> dict:
         """Ask for JSON, validate it parses, retry once with the parse error."""
         content = user if isinstance(user, list) else str(user)
         messages = [{"role": "system", "content": system}, {"role": "user", "content": content}]

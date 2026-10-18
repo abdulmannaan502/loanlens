@@ -83,12 +83,12 @@ with st.sidebar:
         "Each step uses the smallest NVIDIA Nemotron model that does it well, served on **Nebius Token Factory**.")
     st.markdown(
         "| Step | Runs on |\n|---|---|\n"
-        "| Read the offer | Nemotron Nano / Nano Omni |\n"
+        "| Read the offer | Nemotron Nano / 3.5 Super VL |\n"
         "| True cost math | Python (no AI guessing) |\n"
         "| Rule checks | Python, RBI-based checklist |\n"
         "| Check the lender | Tavily search + Nemotron Super |\n"
         "| Verdict | Nemotron 3 Ultra |\n"
-        "| Telugu / Hindi | Nemotron Nano |")
+        "| Telugu / Hindi | Nemotron 3 Ultra |")
     st.markdown("---")
     st.markdown(f'<div class="ll-status">Nemotron on Nebius: {"connected ✅" if client else "not configured"}<br>'
                 f'Tavily web search: {"connected ✅" if has_tavily else "not configured"}</div>', unsafe_allow_html=True)
@@ -180,6 +180,22 @@ elif go_sample:
 
 
 # ---------- render ----------
+def trace_rows(calls):
+    """Group model calls by step so 20+ small calls read as a handful of rows."""
+    order, agg = [], {}
+    for c in calls:
+        step = c["step"].split(" (")[0] if c["step"].startswith(("translate", "fix")) else c["step"]
+        step = "translate to Telugu / Hindi" if step in ("translate", "fix sentence") else step
+        key = (step, c["model"])
+        if key not in agg:
+            agg[key] = {"step": step, "model": c["model"], "calls": 0, "model seconds": 0.0, "tokens": 0}
+            order.append(key)
+        agg[key]["calls"] += 1
+        agg[key]["model seconds"] = round(agg[key]["model seconds"] + (c.get("seconds") or 0), 1)
+        agg[key]["tokens"] += c.get("tokens") or 0
+    return [agg[k] for k in order]
+
+
 def rupees(x):
     return f"₹{x:,.0f}"
 
@@ -257,8 +273,7 @@ def render(a: Analysis):
                 st.markdown(f"- With compounding, the effective yearly rate is about {c['apr_effective'] * 100:,.0f}%.")
         if a.calls:
             st.markdown("**Agent trace** (Nemotron calls on Nebius Token Factory)")
-            st.dataframe([{"step": x["step"], "model": x["model"], "seconds": x["seconds"], "tokens": x["tokens"]} for x in a.calls],
-                          hide_index=True, use_container_width=True)
+            st.dataframe(trace_rows(a.calls), hide_index=True, use_container_width=True)
         elif a.mode == "offline":
             st.caption("Offline mode: no AI calls were made. Terms came from the sample's pre-filled fields.")
         st.markdown("**Extracted terms**")

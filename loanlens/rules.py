@@ -69,10 +69,15 @@ def check_terms(terms: dict, apr_simple: float | None) -> list[Flag]:
     perms = [str(p).lower() for p in (terms.get("permissions") or [])
              if not any(k in str(p).lower() for k in ("kyc", "one-time", "one time"))]
     risky = sorted({RISKY_PERMISSIONS[k] for p in perms for k in RISKY_PERMISSIONS if k in p})
-    if risky:
-        sev = "high" if any(x in " ".join(perms) for x in ("contact", "call", "photo", "media", "sms")) else "medium"
-        flags.append(Flag("permissions", sev, "Asks for access it shouldn't need",
-                          "The app wants " + ", ".join(risky) + ". Contact-list access has been used by illegal lenders to shame borrowers."))
+    joined = " ".join(perms)
+    serious = sorted({RISKY_PERMISSIONS[k] for k in ("contacts", "call_logs", "sms", "photos", "media") if k in joined})
+    soft = sorted({RISKY_PERMISSIONS[k] for k in ("location", "microphone", "camera") if k in joined})
+    if serious:
+        flags.append(Flag("permissions", "high", "Asks for access it shouldn't need",
+                          "The app wants " + ", ".join(serious + soft) + ". Contact-list access has been used by illegal lenders to shame borrowers."))
+    elif soft:
+        flags.append(Flag("permissions_soft", "low", "Camera or location access",
+                          "The app wants " + ", ".join(soft) + ". This is acceptable only as a one-time check during sign-up, so confirm it can't keep watching afterwards."))
 
     if _is_false(terms.get("kfs_provided")):
         flags.append(Flag("kfs", "high", "No Key Fact Statement",
