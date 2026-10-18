@@ -127,6 +127,7 @@ class Analysis:
     translations: dict = field(default_factory=dict)
     calls: list[dict] = field(default_factory=list)
     mode: str = "live"   # "live" | "offline" | "sample"
+    elapsed: float | None = None
     error: str | None = None
 
     def to_json(self) -> str:
@@ -157,6 +158,7 @@ def cost_dict(c: CostBreakdown | None) -> dict | None:
 def run(client: NemotronClient, text: str = "", image: tuple[bytes, str] | None = None,
         app_name: str = "", languages: tuple[str, ...] = ("te", "hi"), progress=None) -> Analysis:
     say = progress or (lambda *_: None)
+    _t0 = __import__("time").time()
 
     # 1. Extract
     say("extract", "Reading the offer with Nemotron" + (" 3.5 Super VL (vision)" if image else " Nano"))
@@ -227,7 +229,7 @@ def run(client: NemotronClient, text: str = "", image: tuple[bytes, str] | None 
     return Analysis(
         terms=terms, cost=cost_dict(cost), flags=[f.to_dict() for f in flags], risk_score=score(flags),
         verification=verification, sources=sources, verdict=verdict, translations=translations,
-        calls=[c.__dict__ for c in client.log], mode="live",
+        calls=[c.__dict__ for c in client.log], mode="live", elapsed=round(__import__("time").time() - _t0, 1),
     )
 
 

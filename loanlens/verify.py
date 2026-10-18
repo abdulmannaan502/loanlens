@@ -61,4 +61,5 @@ Rules:
 - "regulated" only if a source clearly ties the app to an RBI-regulated bank or NBFC.
 - "warning" if sources report harassment, fraud, bans, police cases or removal from app stores.
 - Otherwise "unverified". Absence of evidence is NOT proof of fraud; say so plainly.
+- Only cite a source if it actually names the app or its lender; generic advice articles are not evidence. If no source names them, evidence must be an empty list.
 - Never invent sources or facts that are not in the results."""

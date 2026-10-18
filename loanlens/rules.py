@@ -19,7 +19,7 @@ RISKY_PERMISSIONS = {
     "media": "your photos and media",
     "location": "your precise location",
     "microphone": "your microphone",
-    "camera": "your camera (beyond one-time KYC)",
+    "camera": "your camera",
 }
 
 # Rules summarised in plain language. Each checklist item is the borrower-facing

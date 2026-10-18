@@ -225,9 +225,9 @@ def render(a: Analysis):
                 f'<div class="app">{app}</div>{rows}{apr_block}</div>', unsafe_allow_html=True)
 
     if a.calls:
-        secs = sum(x.get("seconds") or 0 for x in a.calls)
-        st.markdown(f'<div class="ll-note">Analysed live: {len(a.calls)} NVIDIA Nemotron calls on Nebius Token Factory'
-                    f'{" plus Tavily web search" if a.sources else ""}, {secs:.1f}s of model time.</div>', unsafe_allow_html=True)
+        took = f"in {a.elapsed:.0f}s: " if a.elapsed else ": "
+        st.markdown(f'<div class="ll-note">Analysed live {took}{len(a.calls)} NVIDIA Nemotron calls on Nebius Token Factory'
+                    f'{" plus Tavily web search" if a.sources else ""}.</div>', unsafe_allow_html=True)
 
     lang_tabs = ["English"] + [LANGS[l] for l in a.translations]
     tabs = st.tabs(lang_tabs)
