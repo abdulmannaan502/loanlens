@@ -1,0 +1,45 @@
+import pytest
+
+from loanlens.apr import LoanTerms, compute_cost
+from loanlens.rules import check_terms
+from loanlens.llm import extract_json, strip_reasoning
+from loanlens.samples import SAMPLES
+
+
+def test_zero_interest_short_loan():
+    c = compute_cost(LoanTerms(principal=5000, tenure_days=7, upfront_fees=1200))
+    assert c.net_disbursed == 3800
+    assert round(c.apr_simple * 100) == 1647
+
+
+def test_gst_is_added_to_fees():
+    c = compute_cost(LoanTerms(principal=5000, tenure_days=7, upfront_fees=1000, gst_on_fees=True))
+    assert c.net_disbursed == 3820
+
+
+def test_emi_loan_is_reasonable():
+    t = SAMPLES["Sahaj Credit (fictional): regulated 12-month EMI loan"]["terms"]
+    c = compute_cost(LoanTerms(principal=50000, tenure_days=365, upfront_fees=1000, gst_on_fees=True,
+                               interest_amount=t["interest_amount"], installments=12))
+    assert 0.18 < c.apr_simple < 0.26
+
+
+def test_fees_larger_than_loan_rejected():
+    with pytest.raises(ValueError):
+        compute_cost(LoanTerms(principal=1000, tenure_days=7, upfront_fees=1500))
+
+
+def test_flags_on_predatory_sample():
+    t = SAMPLES["FlashPaisa (fictional): '0% interest' 7-day loan"]["terms"]
+    ids = {f.id for f in check_terms(t, 16.5)}
+    assert {"apr_extreme", "misleading_rate", "permissions", "third_party_contact", "no_lender"} <= ids
+
+
+def test_kyc_camera_not_flagged():
+    t = SAMPLES["Sahaj Credit (fictional): regulated 12-month EMI loan"]["terms"]
+    assert not [f for f in check_terms(t, 0.22) if f.id == "permissions"]
+
+
+def test_json_helpers():
+    assert extract_json('noise ```json\n{"a": 1}\n``` tail') == {"a": 1}
+    assert strip_reasoning("<think>hmm</think>{}") == "{}"
