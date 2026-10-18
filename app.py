@@ -90,8 +90,8 @@ with st.sidebar:
         "| Verdict | Nemotron 3 Ultra |\n"
         "| Telugu / Hindi | Nemotron Nano |")
     st.markdown("---")
-    st.markdown(f"Nemotron on Nebius: {'connected ✅' if client else 'not configured'}  \n"
-                f"Tavily web search: {'connected ✅' if has_tavily else 'not configured'}")
+    st.markdown(f'<div class="ll-status">Nemotron on Nebius: {"connected ✅" if client else "not configured"}<br>'
+                f'Tavily web search: {"connected ✅" if has_tavily else "not configured"}</div>', unsafe_allow_html=True)
     langs = st.multiselect("Also explain in", options=["te", "hi"], default=["te", "hi"],
                            format_func=lambda c: LANGS[c])
     with st.expander("Open a saved report"):
