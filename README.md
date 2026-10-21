@@ -7,7 +7,7 @@ LoanLens is an AI agent that reads an Indian digital-lending offer (pasted text,
 Built for the **Nebius x NVIDIA Global AI Hackathon** (Best Apps and Agents track) with **NVIDIA Nemotron** models on **Nebius Token Factory** and **Tavily** search.
 
 - **Live demo:** https://loanlens-nemotron.streamlit.app
-- **Demo video:** _add your YouTube URL here_
+- **Demo video:** (https://youtu.be/UNy63DeQ4js)
 
 ![LoanLens result](docs/screenshot.png)
 ![Telugu and Hindi explanations](docs/telugu.png)
